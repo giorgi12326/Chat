@@ -9,6 +9,7 @@ import java.util.Iterator;
 import java.util.Map;
 
 import static org.example.v4.Server.nodes;
+import static org.example.v4.Server.senderQueue;
 
 public class Sender implements Runnable{
 
@@ -17,8 +18,7 @@ public class Sender implements Runnable{
     public void run() {
         while(true) {
             try {
-//                Message take = queue.take();
-                Message take = new Message("ping");
+                Message take = senderQueue.take();
                 if(take.nodeId == -1) {
                     Iterator<Map.Entry<Integer, PeerConnection>> iterator = nodes.entrySet().iterator();
                     while (iterator.hasNext()) {
@@ -27,7 +27,6 @@ public class Sender implements Runnable{
                             BufferedWriter bufferedWriter = entry.getValue().writer;
                             bufferedWriter.write(take.payload + "\n");
                             bufferedWriter.flush();
-                            System.out.println("sent ping to " + entry.getKey());
                         } catch (IOException e) {
                             System.out.println("--------------------------------- SENDER: lost connection to" + entry.getKey() + " ---------------------------------");
                             entry.getValue().close();

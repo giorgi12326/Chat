@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.util.Iterator;
 import java.util.Map;
 
+import static org.example.v4.Server.inboundQueue;
 import static org.example.v4.Server.nodes;
 
 public class Receiver implements Runnable{
@@ -23,9 +24,9 @@ public class Receiver implements Runnable{
                         System.out.println("--------------------------------- NULLED: lost connection to" + entry.getKey() + " ---------------------------------");
                         entry.getValue().close();
                         iterator.remove();
+                        continue;
                     }
-
-                    System.out.println("received: " + s);
+                    inboundQueue.add(s);
 
                 } catch (IOException e) {
                     System.out.println("--------------------------------- LISTENER: lost connection to" + entry.getKey() + " ---------------------------------");
