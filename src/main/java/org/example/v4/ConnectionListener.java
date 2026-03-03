@@ -1,5 +1,7 @@
 package org.example.v4;
 
+import org.example.v4.dto.PeerConnection;
+
 import java.io.*;
 import java.net.Socket;
 

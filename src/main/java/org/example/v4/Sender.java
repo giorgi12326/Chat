@@ -1,12 +1,14 @@
 package org.example.v4;
 
+import org.example.v4.dto.Message;
+import org.example.v4.dto.PeerConnection;
+
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.Map;
 
 import static org.example.v4.Server.nodes;
-import static org.example.v4.Server.queue;
 
 public class Sender implements Runnable{
 

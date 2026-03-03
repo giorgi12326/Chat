@@ -1,8 +1,8 @@
-package org.example.v4;
+package org.example.v4.dto;
 
 public class Message {
-    int nodeId = -1;
-    String payload;
+    public int nodeId = -1;
+    public String payload;
 
     public Message(int nodeId, String payload) {
         this.nodeId = nodeId;

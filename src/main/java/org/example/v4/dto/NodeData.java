@@ -1,4 +1,4 @@
-package org.example.v4;
+package org.example.v4.dto;
 
 public class NodeData {
     public Integer id;

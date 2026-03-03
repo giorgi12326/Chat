@@ -1,12 +1,12 @@
 package org.example.v4;
 
-import org.w3c.dom.Node;
+import org.example.v4.dto.Message;
+import org.example.v4.dto.NodeData;
+import org.example.v4.dto.PeerConnection;
 
 import java.io.*;
-import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.SocketTimeoutException;
 import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;

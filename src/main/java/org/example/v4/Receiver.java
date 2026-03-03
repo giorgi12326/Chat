@@ -1,5 +1,7 @@
 package org.example.v4;
 
+import org.example.v4.dto.PeerConnection;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.util.Iterator;
@@ -22,6 +24,7 @@ public class Receiver implements Runnable{
                         entry.getValue().close();
                         iterator.remove();
                     }
+
                     System.out.println("received: " + s);
 
                 } catch (IOException e) {
