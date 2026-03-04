@@ -12,4 +12,12 @@ public class Message {
     public Message(String payload) {
         this.payload = payload;
     }
+
+    @Override
+    public String toString() {
+        return "Message{" +
+                "nodeId=" + nodeId +
+                ", payload='" + payload + '\'' +
+                '}';
+    }
 }

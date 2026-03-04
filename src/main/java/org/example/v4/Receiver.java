@@ -11,29 +11,36 @@ import static org.example.v4.Server.inboundQueue;
 import static org.example.v4.Server.nodes;
 
 public class Receiver implements Runnable{
+
+
+    private final PeerConnection peerConnection;
+    private final int nodeId;
+
+    public Receiver(int nodeId ,PeerConnection peerConnection) {
+        this.nodeId = nodeId;
+        this.peerConnection = peerConnection;
+    }
+
+
     @Override
     public void run() {
-        while(true) {
-            Iterator<Map.Entry<Integer, PeerConnection>> iterator = nodes.entrySet().iterator();
-            while (iterator.hasNext()) {
-                Map.Entry<Integer, PeerConnection> entry = iterator.next();
-                try {
-                    BufferedReader bufferedWriter = entry.getValue().reader;
-                    String s = bufferedWriter.readLine();// blocking per node
-                    if(s == null){
-                        System.out.println("--------------------------------- NULLED: lost connection to" + entry.getKey() + " ---------------------------------");
-                        entry.getValue().close();
-                        iterator.remove();
-                        continue;
-                    }
-                    inboundQueue.add(s);
+        try {
+            while (true) {
+                String s = peerConnection.reader.readLine();
 
-                } catch (IOException e) {
-                    System.out.println("--------------------------------- LISTENER: lost connection to" + entry.getKey() + " ---------------------------------");
-                    entry.getValue().close();
-                    iterator.remove();
+                if (s == null) {
+                    System.out.println("--------------------------------- NULLED: lost connection to" + nodeId + " ---------------------------------");
+                    break;
                 }
+
+                inboundQueue.put(s);
             }
+        } catch (IOException | InterruptedException e) {
+            System.out.println("--------------------------------- LISTENER: lost connection to" + nodeId + " ---------------------------------");
+        } finally {
+            peerConnection.close();
+            nodes.remove(nodeId);
+            System.out.println("Receiver thread for " + nodeId + " stopped.");
         }
     }
 }

@@ -24,6 +24,7 @@ public class Sender implements Runnable{
                     while (iterator.hasNext()) {
                         Map.Entry<Integer, PeerConnection> entry = iterator.next();
                         try {
+                            System.out.println(Server.state + "|sent: " + take.payload);
                             BufferedWriter bufferedWriter = entry.getValue().writer;
                             bufferedWriter.write(take.payload + "\n");
                             bufferedWriter.flush();

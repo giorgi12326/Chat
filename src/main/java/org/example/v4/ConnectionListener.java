@@ -16,7 +16,9 @@ public class ConnectionListener implements Runnable{
             try {
                 Socket accept = serverSocket.accept();
                 int s = exchangeIds(accept);
-                nodes.put(s, new PeerConnection(accept));
+                PeerConnection peerConnection = new PeerConnection(accept);
+                nodes.put(s, peerConnection);
+                new Thread(new Receiver(id, peerConnection)).start();
                 System.out.println("================================= connection accepted to node with id: " + s + " =================================");
             } catch (IOException e) {
                 throw new RuntimeException(e);

@@ -19,8 +19,9 @@ public class ConnectionInitiator implements Runnable{
                     try {
                         Socket socket = new Socket(InetAddress.getLocalHost(), data.port);
                         int s = exchangeIds(socket);
-                        nodes.put(s, new PeerConnection(socket));
-
+                        PeerConnection peerConnection = new PeerConnection(socket);
+                        nodes.put(s, peerConnection);
+                        new Thread(new Receiver(data.id, peerConnection)).start();
                         System.out.println("================================= connected myself to node with id: " + data.id + " =================================");
                     }
                     catch (SocketTimeoutException e) {
