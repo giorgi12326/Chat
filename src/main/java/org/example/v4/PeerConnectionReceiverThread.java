@@ -2,21 +2,18 @@ package org.example.v4;
 
 import org.example.v4.dto.PeerConnection;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.util.Iterator;
-import java.util.Map;
 
 import static org.example.v4.Server.inboundQueue;
 import static org.example.v4.Server.nodes;
 
-public class Receiver implements Runnable{
+public class PeerConnectionReceiverThread implements Runnable{
 
 
     private final PeerConnection peerConnection;
     private final int nodeId;
 
-    public Receiver(int nodeId ,PeerConnection peerConnection) {
+    public PeerConnectionReceiverThread(int nodeId , PeerConnection peerConnection) {
         this.nodeId = nodeId;
         this.peerConnection = peerConnection;
     }

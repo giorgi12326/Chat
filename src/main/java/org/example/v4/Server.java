@@ -116,7 +116,7 @@ public class Server {
             while(true) {
                 try {
                     String take = inboundQueue.take();
-                    System.out.println(state + "|received: " + take);
+                    System.out.println(state + "|received: " + take + "   |   " + currentTerm);
 
                     if (take.equals("HEARTBEAT_TIMEOUT") && state == LEADER) {
                         heartBeatTimer = System.currentTimeMillis();
@@ -128,19 +128,27 @@ public class Server {
                         currentTerm++;
                         votedFor = id;
                         votesReceived.add(id);
+                        if (votesReceived.size() >= (nodes.size() + 2) / 2) {
+                            System.out.println(votesReceived.size() + " " +  nodes.size());
+                            state = LEADER;
+                            System.out.println("BECAME LEADER");
+                            currentLeader = id;
+
+                            senderQueue.put(new Message("HEARTBEAT|nodeId=" + id + "|currentTerm=" + currentTerm));
+                        }
 
                         senderQueue.put(new Message("VOTE_REQUEST|nodeId=" + id + "|currentTerm=" + currentTerm));
 
                     } else {
                         String[] split = take.split("\\|");
                         if(split[0].equals("HEARTBEAT")){
-                            System.out.println(state + "|received: " + take + " currterm " + currentTerm);
-
                             int nodeId = Integer.parseInt(split[1].split("=")[1]);
                             int currentTerm = Integer.parseInt(split[2].split("=")[1]);
-                            if(currentTerm > this.currentTerm){
+                            if(currentTerm >= this.currentTerm){
                                 currentLeader = nodeId;
                                 this.currentTerm = currentTerm;
+                                if(state != FOLLOWER)
+                                    System.out.println("STEPPING DOWNNN BECAUSE OF OTHER LEADER!");
                                 state = FOLLOWER;
                                 votedFor = -1;
                                 votesReceived.clear();
