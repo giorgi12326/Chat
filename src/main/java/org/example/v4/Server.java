@@ -15,6 +15,14 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 import static org.example.v4.dto.State.*;
 
+/**
+ * Only one leader at the time
+ *    you need the majority of nodes, it is guaranteed that one node can only vote once, and we also use SET on recipient side.
+ * if no leader one will be elected one will be elected
+ *    followers transition into candidate state and randomly election times out and increase their term and send VOTE_REQUESTS, if timeout window allows candidate to hav highest term for amount of time it takes to send and recieve notes and send out heartbeat
+ *
+ */
+
 public class Server {
     static int id;
     static int port;
@@ -85,7 +93,8 @@ public class Server {
 
         new Thread(()->{
             while(true){
-                if(System.currentTimeMillis() - Server.heartBeatTimer > 1500 + (random.nextDouble() * 1000) && state == LEADER){//TODO
+                double v1 = 500 + (random.nextDouble() * 1000);
+                if(state == LEADER && System.currentTimeMillis() - Server.heartBeatTimer > v1){//TODO
                     try {
                         inboundQueue.put("HEARTBEAT_TIMEOUT");
                     } catch (InterruptedException e) {
@@ -93,7 +102,8 @@ public class Server {
                     }
                     Server.heartBeatTimer = System.currentTimeMillis();
                 }
-                if(System.currentTimeMillis() - lastElectionTimer > 5000 + (random.nextDouble() * 4000) && state != LEADER){//TODO
+                double v2 = 5000 + (random.nextDouble() * 8000);
+                if(state != LEADER && System.currentTimeMillis() - lastElectionTimer > v2){//TODO
                     try {
                         inboundQueue.put("ELECTION_TIMEOUT");
                     } catch (InterruptedException e) {
@@ -116,7 +126,6 @@ public class Server {
             while(true) {
                 try {
                     String take = inboundQueue.take();
-                    System.out.println(state + "|received: " + take + "   |   " + currentTerm);
 
                     if (take.equals("HEARTBEAT_TIMEOUT") && state == LEADER) {
                         heartBeatTimer = System.currentTimeMillis();
@@ -128,14 +137,7 @@ public class Server {
                         currentTerm++;
                         votedFor = id;
                         votesReceived.add(id);
-                        if (votesReceived.size() >= (nodes.size() + 2) / 2) {
-                            System.out.println(votesReceived.size() + " " +  nodes.size());
-                            state = LEADER;
-                            System.out.println("BECAME LEADER");
-                            currentLeader = id;
-
-                            senderQueue.put(new Message("HEARTBEAT|nodeId=" + id + "|currentTerm=" + currentTerm));
-                        }
+                        checkIfQuorumAndUpdate();
 
                         senderQueue.put(new Message("VOTE_REQUEST|nodeId=" + id + "|currentTerm=" + currentTerm));
 
@@ -144,14 +146,16 @@ public class Server {
                         if(split[0].equals("HEARTBEAT")){
                             int nodeId = Integer.parseInt(split[1].split("=")[1]);
                             int currentTerm = Integer.parseInt(split[2].split("=")[1]);
-                            if(currentTerm >= this.currentTerm){
-                                currentLeader = nodeId;
+                            if(currentTerm > this.currentTerm){
                                 this.currentTerm = currentTerm;
                                 if(state != FOLLOWER)
                                     System.out.println("STEPPING DOWNNN BECAUSE OF OTHER LEADER!");
-                                state = FOLLOWER;
                                 votedFor = -1;
                                 votesReceived.clear();
+                            }
+                            if(currentTerm == this.currentTerm) {
+                                state = FOLLOWER;
+                                currentLeader = nodeId;
                             }
                             lastElectionTimer = System.currentTimeMillis();
                         }
@@ -159,7 +163,7 @@ public class Server {
                         if (split[0].equals("VOTE_REQUEST")) {
                             int nodeId = Integer.parseInt(split[1].split("=")[1]);
                             int currentTerm = Integer.parseInt(split[2].split("=")[1]);
-                            if (currentTerm > this.currentTerm) {
+                            if (currentTerm > this.currentTerm) {// only vote for higher one because  if equals it means there was a leader in that term already and candidate asking for vote was in old term and now it increased it ORR its candidate election time outing at the same time
                                 System.out.println("BECAME FOLLOWER!");
                                 state = FOLLOWER;
                                 this.currentTerm = currentTerm;
@@ -167,9 +171,9 @@ public class Server {
                                 votesReceived.clear();
                             }
                             if (currentTerm == this.currentTerm && (votedFor == -1 || votedFor == nodeId))
-                                senderQueue.put(new Message("VOTE_RESPONSE|nodeId=" + id + "|currentTerm=" + currentTerm + "|true"));
+                                senderQueue.put(new Message(nodeId,"VOTE_RESPONSE|nodeId=" + id + "|currentTerm=" + currentTerm + "|true"));
                             else
-                                senderQueue.put(new Message("VOTE_RESPONSE|nodeId=" + id + "|currentTerm=" + currentTerm + "|false"));
+                                senderQueue.put(new Message(nodeId,"VOTE_RESPONSE|nodeId=" + id + "|currentTerm=" + currentTerm + "|false"));
                         }
 
                         if (split[0].equals("VOTE_RESPONSE")) {
@@ -178,13 +182,13 @@ public class Server {
                             boolean granted = split[3].equals("true");
                             if (state == CANDIDATE && currentTerm == this.currentTerm && granted) {
                                 votesReceived.add(nodeId);
-
-                                if (votesReceived.size() >= (nodes.size() + 1) / 2) {
-                                    state = LEADER;
-                                    System.out.println("BECAME LEADER");
-                                    currentLeader = id;
-                                    senderQueue.put(new Message("HEARTBEAT|nodeId=" + id + "|currentTerm=" + currentTerm));
-                                }
+                                checkIfQuorumAndUpdate();
+                            }
+                            else if(currentTerm > this.currentTerm){
+                                this.currentTerm = currentTerm;
+                                votedFor = -1;
+                                votesReceived.clear();
+                                state = FOLLOWER;
                             }
                         }
                     }
@@ -193,6 +197,16 @@ public class Server {
                 }
             }
         }).start();
+    }
+
+    private void checkIfQuorumAndUpdate() throws InterruptedException {
+        if (votesReceived.size() >= (nodes.size() + 2) / 2) {
+            state = LEADER;
+            currentLeader = id;
+            System.out.println("BECAME LEADER");
+
+            senderQueue.put(new Message("HEARTBEAT|nodeId=" + id + "|currentTerm=" + this.currentTerm));
+        }
     }
 
     static int exchangeIds(Socket accept) throws IOException {
