@@ -12,9 +12,11 @@ public class PeerConnection {
         this.socket = socket;
         this.reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
         this.writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
+        System.out.println("conneciton created");
     }
 
     public void close() {
+        System.out.println("closed connection!!!!");
         try { reader.close(); } catch (IOException ignored) {}
         try { writer.close(); } catch (IOException ignored) {}
         try { socket.close(); } catch (IOException ignored) {}

@@ -4,8 +4,7 @@ import org.example.v4.dto.PeerConnection;
 
 import java.io.IOException;
 
-import static org.example.v4.Server.inboundQueue;
-import static org.example.v4.Server.nodes;
+import static org.example.v4.Server.*;
 
 public class PeerConnectionReceiverThread implements Runnable{
 
@@ -24,6 +23,7 @@ public class PeerConnectionReceiverThread implements Runnable{
         try {
             while (true) {
                 String s = peerConnection.reader.readLine();
+                System.out.println(state + "|" + s);
 
                 if (s == null) {
                     System.out.println("--------------------------------- NULLED: lost connection to" + nodeId + " ---------------------------------");
