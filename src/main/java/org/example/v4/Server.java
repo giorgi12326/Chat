@@ -21,6 +21,8 @@ import static org.example.v4.dto.State.*;
  */
 
 public class Server {
+    public static boolean logSent = false;
+    private static boolean logReceived = false;
     static int id;
     static int port;
     static Set<NodeData> nodeData = new HashSet<>();
@@ -33,11 +35,11 @@ public class Server {
     volatile static long heartBeatTimer = System.currentTimeMillis();
     volatile static long lastElectionTimer = System.currentTimeMillis();
 
-    int currentLeader = -1;
-    static State state = CANDIDATE;
-    int currentTerm;
-    int votedFor = -1;
-    Set<Integer> votesReceived = new HashSet<>();
+    volatile int currentLeader = -1;
+    volatile static State state = FOLLOWER;
+    volatile int currentTerm;
+    volatile int votedFor = -1;
+    volatile Set<Integer> votesReceived = new HashSet<>();
 
     volatile List<LogEntry> log = new ArrayList<>();
     volatile int[] sentLength = new int[3];
@@ -89,21 +91,11 @@ public class Server {
         new Thread(new ConnectionInitiator()).start();
         new Thread(new ConnectionListener()).start();
         new Thread(new Sender()).start();
-        new Thread(()->{
-            Scanner scanner = new Scanner(System.in);
-            String s = scanner.nextLine();
-            if(state == LEADER) {
-                log.add(new LogEntry(currentTerm, s));
-                System.out.println(log);
-            }
-
-
-        }).start();
+        startClientListener();
 
         new Thread(()->{
             while(true){
-                double v1 = 50 + (random.nextDouble() * 100);
-                if(state == LEADER && System.currentTimeMillis() - Server.heartBeatTimer > v1){//TODO
+                if(state == LEADER && System.currentTimeMillis() - Server.heartBeatTimer > 100 + (id + 1) * 60L){//TODO
                     try {
                         inboundQueue.put("HEARTBEAT_TIMEOUT");
                     } catch (InterruptedException e) {
@@ -111,8 +103,7 @@ public class Server {
                     }
                     Server.heartBeatTimer = System.currentTimeMillis();
                 }
-                double v2 = 50 + (random.nextDouble() * 120);
-                if(state != LEADER && System.currentTimeMillis() - lastElectionTimer > v2){//TODO
+                if(state != LEADER && System.currentTimeMillis() - lastElectionTimer >  1500 + (id + 1) * 60L){//TODO
                     try {
                         inboundQueue.put("ELECTION_TIMEOUT");
                     } catch (InterruptedException e) {
@@ -135,12 +126,14 @@ public class Server {
             while(true) {
                 try {
                     String take = inboundQueue.take();
-
-                    if (take.equals("HEARTBEAT_TIMEOUT") && state == LEADER) {
+                    if(Server.logReceived)
+                        System.out.println("RECEIVED" + "(" + state  + ") " + take);
+                    if ((take.equals("HEARTBEAT_TIMEOUT") || take.equals("BECAME_LEADER")) && state == LEADER) {
                         heartBeatTimer = System.currentTimeMillis();
                         for(NodeData node : nodeData) {
                             if(node.id != id)
                                 replicateLog(node.id);
+                            else System.out.println("IMPOSSIBLE?");
                         }
                     }
                     else if (take.equals("ELECTION_TIMEOUT") && state != LEADER) {
@@ -151,6 +144,7 @@ public class Server {
                         votesReceived.add(id);
                         checkIfMajorityOfVotesAndUpdate();
 
+                        System.out.println("BECAME CANDIDATE: " + currentTerm);
                         senderQueue.put(new Message("VOTE_REQUEST|nodeId=" + id + "|currentTerm=" + currentTerm +"|logLength=" + log.size() + "|lastTerm=" + (log.isEmpty() ? 0 : log.get(log.size()-1).term)));
 
                     } else {
@@ -161,22 +155,23 @@ public class Server {
                             int currentTerm = Integer.parseInt(split[2].split("=")[1]);
                             int prefixLen = Integer.parseInt(split[3].split("=")[1]);
                             int prefixTerm = Integer.parseInt(split[4].split("=")[1]);
-                            String suffix = "";
                             String[] split1 = split[5].split("=");
+
+                            String suffix = "";
                             if(split1.length > 1)
                                 suffix = split1[1];
 
-                            if(currentTerm > this.currentTerm) {
+                            if(currentTerm > this.currentTerm){
                                 this.currentTerm = currentTerm;
-                                if (state != FOLLOWER)
-                                    System.out.println("STEPPING DOWNNN BECAUSE OF OTHER LEADER!");
                                 votedFor = -1;
                                 votesReceived.clear();
                             }
-
-                            if(currentTerm > this.currentTerm){
-                                stepDownToFollowerUpdateTermAndReset(currentTerm);
+                            else if(currentTerm == this.currentTerm){
+                                state = FOLLOWER;
+                                currentLeader = nodeId;
+                                System.out.println("BECAME FOLLOWER: " + currentTerm);
                             }
+
                             boolean logOk = (log.size() >= prefixLen) && (prefixLen == 0 || log.get(prefixLen-1).term == prefixTerm);
                             if(this.currentTerm == currentTerm && logOk){
                                 appendEntries(prefixLen, computeSuffixEntries(suffix));
@@ -184,7 +179,6 @@ public class Server {
                             }
                             else
                                 senderQueue.put(new Message(nodeId, "LogResponse|nodeId=" + id + "|currentTerm=" + currentTerm + "|ack=" + 0 + "|success=" + false));
-
                             lastElectionTimer = System.currentTimeMillis();
                         }
                         if(split[0].equals("LogResponse")){
@@ -213,19 +207,10 @@ public class Server {
 
                             int lastTerm = log.isEmpty() ? 0 : log.get(log.size()-1).term;
 
-
-                            if (currentTerm > this.currentTerm) {// only vote for higher one because  if equals it means there was a leader in that term already and candidate asking for vote was in old term and now it increased it ORR its candidate election time outing at the same time
-                                stepDownToFollowerUpdateTermAndReset(currentTerm);
-                            }
-
                             boolean logOk = cLastTerm > lastTerm || (cLastTerm == lastTerm && cLogLength >= log.size());
-                            if (logOk && currentTerm == this.currentTerm && (votedFor == -1 || votedFor == nodeId)) {
-                                senderQueue.put(new Message(nodeId,"VOTE_RESPONSE|nodeId=" + id + "|currentTerm=" + currentTerm + "|true"));
 
-                            }
-                            else{
-                                senderQueue.put(new Message(nodeId, "VOTE_RESPONSE|nodeId=" + id + "|currentTerm=" + currentTerm + "|false"));
-                            }
+                            if (logOk && (votedFor == -1 || votedFor == nodeId))
+                                senderQueue.put(new Message(nodeId,"VOTE_RESPONSE|nodeId=" + id + "|currentTerm=" + currentTerm + "|true"));
                         }
 
                         if (split[0].equals("VOTE_RESPONSE")) {
@@ -235,9 +220,6 @@ public class Server {
                             if (state == CANDIDATE && currentTerm == this.currentTerm && granted) {
                                 votesReceived.add(nodeId);
                                 checkIfMajorityOfVotesAndUpdate();
-                            }
-                            else if(currentTerm > this.currentTerm){
-                                stepDownToFollowerUpdateTermAndReset(currentTerm);
                             }
                         }
                     }
@@ -252,7 +234,7 @@ public class Server {
         int prefixLen = sentLength[nodeId];
         int prefixTerm = 0;
         if(prefixLen > 0)
-            prefixTerm = log.get(prefixLen).term;
+            prefixTerm = log.get(prefixLen-1).term;
 
         StringBuilder computeSuffixFormat = getComputeSuffixFormat(prefixLen);
         senderQueue.put(new Message("LogRequest|nodeId=" + id + "|currentTerm=" + currentTerm + "|prefixLen=" + prefixLen + "|prefixTerm=" + prefixTerm + "|suffix=" + computeSuffixFormat));
@@ -268,7 +250,10 @@ public class Server {
         if(prefixLen + suffix.size() > log.size()){
             for(int i = log.size() - prefixLen; i < suffix.size(); i++){
                 log.add(suffix.get(i));
+                System.out.println(log);
             }
+            System.out.println("-----");
+
         }
     }
 
@@ -295,28 +280,13 @@ public class Server {
         return computeSuffixFormat;
     }
 
-    private void becomeCandidateVoteForSelfIncrementTerm() {
-        state = CANDIDATE;
-        currentTerm++;
-        votedFor = id;
-        votesReceived.add(id);
-    }
-
-    private void stepDownToFollowerUpdateTermAndReset(int currentTerm) {
-        System.out.println("stepping down from " + state + " to FOLLOWER!");
-        state = FOLLOWER;
-        this.currentTerm = currentTerm;
-        votedFor = -1;
-        votesReceived.clear();
-    }
-
     private void checkIfMajorityOfVotesAndUpdate() throws InterruptedException {
-        if (votesReceived.size() >= (nodes.size() + 2) / 2) {
+        if (votesReceived.size() >= (nodeData.size() + 2) / 2) {
             state = LEADER;
             currentLeader = id;
-            System.out.println("BECAME LEADER");
+            System.out.println("BECAME LEADER: " + currentTerm  + " " + votesReceived);
 
-            senderQueue.put(new Message("HEARTBEAT|nodeId=" + id + "|currentTerm=" + this.currentTerm));
+            inboundQueue.put("BECAME_LEADER");
         }
     }
 
@@ -328,5 +298,43 @@ public class Server {
         String s = new BufferedReader(new InputStreamReader(accept.getInputStream())).readLine();
 
         return Integer.parseInt(s);
+    }
+
+    private void startClientListener() {
+        new Thread(() -> {
+            try {
+                ServerSocket clientServerSocket = new ServerSocket(9100 + id);
+                while (true) {
+                    Socket clientSocket = clientServerSocket.accept();
+                    System.out.println("Client connected");
+                    new Thread(() -> {
+                        try {
+                            BufferedReader reader = new BufferedReader(
+                                    new InputStreamReader(clientSocket.getInputStream())
+                            );
+                            BufferedWriter writer = new BufferedWriter(
+                                    new OutputStreamWriter(clientSocket.getOutputStream())
+                            );
+                            String line;
+                            while ((line = reader.readLine()) != null) {
+                                if (state == LEADER) {
+                                    log.add(new LogEntry(currentTerm, line));
+                                    System.out.println(log);
+
+                                    writer.write("OK\n");
+                                } else {
+                                    writer.write("NOT_LEADER:" + currentLeader + "\n");
+                                }
+                                writer.flush();
+                            }
+                        } catch (IOException e) {
+                            System.out.println("Client disconnected");
+                        }
+                    }).start();
+                }
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }).start();
     }
 }

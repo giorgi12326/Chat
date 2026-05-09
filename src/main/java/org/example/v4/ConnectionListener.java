@@ -16,6 +16,8 @@ public class ConnectionListener implements Runnable{
             try {
                 Socket accept = serverSocket.accept();
                 int s = exchangeIds(accept);
+                if(s == 999)
+                    continue;
                 PeerConnection peerConnection = new PeerConnection(accept);
                 nodes.put(s, peerConnection);
                 new Thread(new PeerConnectionReceiverThread(id, peerConnection)).start();

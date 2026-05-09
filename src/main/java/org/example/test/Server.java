@@ -25,7 +25,6 @@ public class Server {
                     serverSocket.close();
                     break;
                 }
-                System.out.println(s);
             }
 
         } catch (Exception e) {

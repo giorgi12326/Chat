@@ -35,7 +35,6 @@ public class Server {
             try {
                 while (true) {
                     Message message = queue.take();
-                    System.out.println(message);
 
                     for (Integer clientId : clientSockets.keySet()) {
                         if (message.getClientId() == clientId) continue;

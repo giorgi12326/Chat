@@ -23,7 +23,6 @@ public class PeerConnectionReceiverThread implements Runnable{
         try {
             while (true) {
                 String s = peerConnection.reader.readLine();
-                System.out.println(state + "|" + s);
 
                 if (s == null) {
                     System.out.println("--------------------------------- NULLED: lost connection to" + nodeId + " ---------------------------------");

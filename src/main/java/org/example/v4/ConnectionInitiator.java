@@ -19,6 +19,8 @@ public class ConnectionInitiator implements Runnable{
                     try {
                         Socket socket = new Socket(InetAddress.getLocalHost(), data.port);
                         int s = exchangeIds(socket);
+                        if(s == 999)//not needde?
+                            continue;
                         PeerConnection peerConnection = new PeerConnection(socket);
                         nodes.put(s, peerConnection);
                         new Thread(new PeerConnectionReceiverThread(data.id, peerConnection)).start();

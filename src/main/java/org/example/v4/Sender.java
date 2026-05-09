@@ -8,8 +8,7 @@ import java.io.IOException;
 import java.util.Iterator;
 import java.util.Map;
 
-import static org.example.v4.Server.nodes;
-import static org.example.v4.Server.senderQueue;
+import static org.example.v4.Server.*;
 
 public class Sender implements Runnable{
 
@@ -19,7 +18,12 @@ public class Sender implements Runnable{
         while(true) {
             try {
                 Message take = senderQueue.take();
+
+
                 if(take.nodeId == -1) {
+                    if(logSent)
+                        System.out.println("BROADCAST" + "(" + state  + ") " + take.payload);
+
                     Iterator<Map.Entry<Integer, PeerConnection>> iterator = nodes.entrySet().iterator();
                     while (iterator.hasNext()) {
                         Map.Entry<Integer, PeerConnection> entry = iterator.next();
@@ -35,6 +39,9 @@ public class Sender implements Runnable{
                     }
                 }
                 else{
+                    if(Server.logSent)
+                        System.out.println("SENT" + "(" + state  + ") " + take.payload);
+
                     PeerConnection peerConnection;
                     peerConnection = nodes.get(take.nodeId);
                     try {
@@ -45,7 +52,6 @@ public class Sender implements Runnable{
                         nodes.remove(take.nodeId);
                     }
                 }
-                Thread.sleep(1000);
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }
