@@ -36,6 +36,7 @@ public class Server {
     volatile static long lastElectionTimer = System.currentTimeMillis();
 
     volatile int currentLeader = -1;
+    volatile int leaderCommit = 0;
     volatile static State state = FOLLOWER;
     volatile int currentTerm;
     volatile int votedFor = -1;
@@ -43,6 +44,9 @@ public class Server {
 
     volatile List<LogEntry> log = new ArrayList<>();
     volatile int[] sentLength = new int[3];
+    private final long heartBeatExpirationTime = 50 + (id + 1) * 60L;
+    private long electionExpirationTime = 1500 + (id + 1) * 60L;
+    BufferedWriter clientWriter;
 
     public static void main(String[] args) {
         Properties props = new Properties();
@@ -95,7 +99,7 @@ public class Server {
 
         new Thread(()->{
             while(true){
-                if(state == LEADER && System.currentTimeMillis() - Server.heartBeatTimer > 100 + (id + 1) * 60L){//TODO
+                if(state == LEADER && System.currentTimeMillis() - Server.heartBeatTimer > heartBeatExpirationTime){//TODO
                     try {
                         inboundQueue.put("HEARTBEAT_TIMEOUT");
                     } catch (InterruptedException e) {
@@ -103,7 +107,7 @@ public class Server {
                     }
                     Server.heartBeatTimer = System.currentTimeMillis();
                 }
-                if(state != LEADER && System.currentTimeMillis() - lastElectionTimer >  1500 + (id + 1) * 60L){//TODO
+                if(state != LEADER && System.currentTimeMillis() - lastElectionTimer > electionExpirationTime){//TODO
                     try {
                         inboundQueue.put("ELECTION_TIMEOUT");
                     } catch (InterruptedException e) {
@@ -120,7 +124,7 @@ public class Server {
         }).start();
         leaderElection();
     }
-    
+
     public void leaderElection(){
         new Thread(()-> {
             while(true) {
@@ -131,13 +135,15 @@ public class Server {
                     if ((take.equals("HEARTBEAT_TIMEOUT") || take.equals("BECAME_LEADER")) && state == LEADER) {
                         heartBeatTimer = System.currentTimeMillis();
                         for(NodeData node : nodeData) {
-                            if(node.id != id)
+                            if(node.id != id) {
                                 replicateLog(node.id);
+                            }
                             else System.out.println("IMPOSSIBLE?");
                         }
                     }
                     else if (take.equals("ELECTION_TIMEOUT") && state != LEADER) {
                         Server.lastElectionTimer = System.currentTimeMillis();
+                        electionExpirationTime = (long) (1300 + (random.nextFloat()*200L));
                         state = CANDIDATE;
                         currentTerm++;
                         votedFor = id;
@@ -165,11 +171,11 @@ public class Server {
                                 this.currentTerm = currentTerm;
                                 votedFor = -1;
                                 votesReceived.clear();
+                                System.out.println("BECAME FOLLOWER: " + currentTerm);
                             }
                             else if(currentTerm == this.currentTerm){
                                 state = FOLLOWER;
                                 currentLeader = nodeId;
-                                System.out.println("BECAME FOLLOWER: " + currentTerm);
                             }
 
                             boolean logOk = (log.size() >= prefixLen) && (prefixLen == 0 || log.get(prefixLen-1).term == prefixTerm);
@@ -187,12 +193,27 @@ public class Server {
                             int ack = Integer.parseInt(split[3].split("=")[1]);
                             boolean success = Boolean.parseBoolean(split[4].split("=")[1]);
 
+
                             if(this.currentTerm == currentTerm && state == LEADER){
-                                if(success)
+                                if(success) {
                                     sentLength[nodeId] = ack;
+                                    int ackCount = 0;
+
+                                    for (int i = 0; i < 3; i++) {
+                                        if(sentLength[i] >= ack){
+                                            ackCount++;
+                                        }
+                                    }
+                                    if(ackCount >= 2 && leaderCommit != ack && clientWriter != null ){
+                                        leaderCommit = ack;
+                                        clientWriter.write("COMMITED!\n");
+                                        clientWriter.flush();
+                                    }
+                                }
                                 else{
                                     if(sentLength[nodeId] > 0)
                                         sentLength[nodeId]--;
+                                    System.out.println("this?");
                                     replicateLog(nodeId);
                                 }
                             }
@@ -223,7 +244,7 @@ public class Server {
                             }
                         }
                     }
-                } catch (InterruptedException e) {
+                } catch (InterruptedException | IOException e) {
                     throw new RuntimeException(e);
                 }
             }
@@ -237,6 +258,9 @@ public class Server {
             prefixTerm = log.get(prefixLen-1).term;
 
         StringBuilder computeSuffixFormat = getComputeSuffixFormat(prefixLen);
+        System.out.println("sending " + prefixLen + " " + computeSuffixFormat);
+
+
         senderQueue.put(new Message("LogRequest|nodeId=" + id + "|currentTerm=" + currentTerm + "|prefixLen=" + prefixLen + "|prefixTerm=" + prefixTerm + "|suffix=" + computeSuffixFormat));
     }
 
@@ -312,7 +336,7 @@ public class Server {
                             BufferedReader reader = new BufferedReader(
                                     new InputStreamReader(clientSocket.getInputStream())
                             );
-                            BufferedWriter writer = new BufferedWriter(
+                            clientWriter = new BufferedWriter(
                                     new OutputStreamWriter(clientSocket.getOutputStream())
                             );
                             String line;
@@ -321,11 +345,10 @@ public class Server {
                                     log.add(new LogEntry(currentTerm, line));
                                     System.out.println(log);
 
-                                    writer.write("OK\n");
                                 } else {
-                                    writer.write("NOT_LEADER:" + currentLeader + "\n");
+                                    clientWriter.write("NOT_LEADER:" + currentLeader + "\n");
                                 }
-                                writer.flush();
+                                clientWriter.flush();
                             }
                         } catch (IOException e) {
                             System.out.println("Client disconnected");
